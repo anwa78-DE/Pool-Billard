@@ -19,6 +19,14 @@ export default function App() {
   const [date, setDate] = useState<Date>(new Date());
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [isBookingOpen, setIsBookingOpen] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState<{
+    isOpen: boolean;
+    bookingId: string;
+    memberName: string;
+    date: string;
+    tableId: number;
+    startTime: string;
+  } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [newBooking, setNewBooking] = useState<{
     tableId: string;
@@ -160,10 +168,30 @@ export default function App() {
     }
   };
 
-  const deleteBooking = async (id: string) => {
-    const updated = bookings.filter((b) => b.id !== id);
+  const deleteBooking = async (id: string, deleteAllFollowing: boolean = false) => {
+    let updated: Booking[];
+    
+    if (deleteAllFollowing && deleteConfirmation) {
+      const targetBooking = bookings.find(b => b.id === id);
+      if (!targetBooking) return;
+      
+      const targetDate = parseISO(targetBooking.startTime);
+      
+      updated = bookings.filter((b) => {
+        // Keep bookings that:
+        // 1. Are NOT for the same member/table (unrelated)
+        // 2. OR are BEFORE the target date
+        const bDate = parseISO(b.startTime);
+        const isSameSeries = b.memberName === targetBooking.memberName && b.tableId === targetBooking.tableId;
+        return !(isSameSeries && (isSameDay(bDate, targetDate) || isAfter(bDate, targetDate)));
+      });
+    } else {
+      updated = bookings.filter((b) => b.id !== id);
+    }
+
     setBookings(updated);
     await saveBookings(updated);
+    setDeleteConfirmation(null);
   };
 
   const timeSlots = Array.from({ length: CLOSING_HOUR - OPENING_HOUR + 1 }, (_, i) => {
@@ -485,7 +513,14 @@ export default function App() {
                               variant="ghost"
                               size="icon"
                               className="h-8 w-8 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-full opacity-0 group-hover:opacity-100 transition-all"
-                              onClick={() => deleteBooking(b.id)}
+                              onClick={() => setDeleteConfirmation({
+                                isOpen: true,
+                                bookingId: b.id,
+                                memberName: b.memberName,
+                                date: b.date,
+                                tableId: b.tableId,
+                                startTime: b.startTime
+                              })}
                             >
                               <Trash2 className="h-4 w-4" />
                             </Button>
@@ -511,6 +546,39 @@ export default function App() {
             );
           })}
         </div>
+
+        {/* Delete Confirmation Dialog */}
+        <Dialog open={deleteConfirmation?.isOpen || false} onOpenChange={(open) => !open && setDeleteConfirmation(null)}>
+          <DialogContent className="sm:max-w-[400px] rounded-3xl">
+            <DialogHeader>
+              <DialogTitle className="text-xl font-bold text-slate-900">Reservierung löschen</DialogTitle>
+              <DialogDescription className="pt-2">
+                Möchten Sie die Reservierung von <span className="font-bold text-slate-900">{deleteConfirmation?.memberName}</span> am {deleteConfirmation && format(parseISO(deleteConfirmation.startTime), "dd.MM.yyyy 'um' HH:mm", { locale: de })} Uhr wirklich löschen?
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-3 py-4">
+              <Button 
+                variant="outline" 
+                className="h-12 justify-start px-4 border-slate-200 hover:bg-slate-50 text-slate-700 font-medium"
+                onClick={() => deleteConfirmation && deleteBooking(deleteConfirmation.bookingId, false)}
+              >
+                Nur diesen Termin löschen
+              </Button>
+              <Button 
+                variant="outline" 
+                className="h-12 justify-start px-4 border-slate-200 hover:bg-red-50 hover:text-red-700 hover:border-red-200 font-medium"
+                onClick={() => deleteConfirmation && deleteBooking(deleteConfirmation.bookingId, true)}
+              >
+                Diesen und alle folgenden Serientermine löschen
+              </Button>
+            </div>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setDeleteConfirmation(null)} className="w-full h-11 text-slate-500 font-bold">
+                Abbrechen
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* Footer Info */}
         <footer className="bg-[#004d00] text-white rounded-3xl p-8 shadow-xl relative overflow-hidden">

@@ -54,13 +54,21 @@ export default function App() {
 
   const saveBookings = async (updatedBookings: Booking[]) => {
     try {
-      await fetch("api.php", {
+      const response = await fetch("api.php", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updatedBookings),
       });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Serverfehler beim Speichern");
+      }
+      return true;
     } catch (e) {
       console.error("Failed to save bookings", e);
+      alert("Fehler beim Speichern: " + (e instanceof Error ? e.message : "Unbekannter Fehler"));
+      return false;
     }
   };
 
@@ -99,10 +107,13 @@ export default function App() {
     }
 
     const updated = [...bookings, booking];
-    setBookings(updated);
-    await saveBookings(updated);
-    setIsBookingOpen(false);
-    setNewBooking({ ...newBooking, memberName: "" });
+    const success = await saveBookings(updated);
+    
+    if (success) {
+      setBookings(updated);
+      setIsBookingOpen(false);
+      setNewBooking({ ...newBooking, memberName: "" });
+    }
   };
 
   const deleteBooking = async (id: string) => {

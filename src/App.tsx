@@ -35,6 +35,13 @@ export default function App() {
   // Load bookings from server
   useEffect(() => {
     fetchBookings();
+    
+    // Global error handler to help diagnose issues on the user's server
+    const handleError = (event: ErrorEvent) => {
+      alert("Ein Anwendungsfehler ist aufgetreten: " + event.message);
+    };
+    window.addEventListener('error', handleError);
+    return () => window.removeEventListener('error', handleError);
   }, []);
 
   const fetchBookings = async () => {
@@ -84,8 +91,16 @@ export default function App() {
     const start = setMinutes(setHours(startOfDay(date), hours), minutes);
     const end = addHours(start, Number(newBooking.duration));
 
+    // Fallback for crypto.randomUUID which requires HTTPS
+    const generateId = () => {
+      if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+        return crypto.randomUUID();
+      }
+      return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+    };
+
     const booking: Booking = {
-      id: crypto.randomUUID(),
+      id: generateId(),
       tableId: Number(newBooking.tableId),
       memberName: newBooking.memberName,
       startTime: start.toISOString(),

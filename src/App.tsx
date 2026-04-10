@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
-import { format, addHours, startOfDay, isSameDay, parseISO, setHours, setMinutes } from "date-fns";
+import { format, addHours, startOfDay, isSameDay, parseISO, setHours, setMinutes, addDays, addWeeks, addMonths, isBefore, isAfter } from "date-fns";
 import { de } from "date-fns/locale";
-import { Calendar as CalendarIcon, Clock, Users, CheckCircle2, AlertCircle, Trash2, Plus, Info } from "lucide-react";
+import { Calendar as CalendarIcon, Clock, Users, CheckCircle2, AlertCircle, Trash2, Plus, Info, Repeat } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
 import { Button } from "@/components/ui/button";
@@ -25,11 +25,15 @@ export default function App() {
     memberName: string;
     startTime: string;
     duration: string;
+    recurrence: "none" | "daily" | "weekly" | "monthly";
+    recurrenceUntil: Date;
   }>({
     tableId: "1",
     memberName: "",
     startTime: "10:00",
     duration: "1",
+    recurrence: "none",
+    recurrenceUntil: addMonths(new Date(), 1),
   });
 
   // Load bookings from server
@@ -88,9 +92,7 @@ export default function App() {
     if (!newBooking.memberName) return;
 
     const [hours, minutes] = newBooking.startTime.split(":").map(Number);
-    const start = setMinutes(setHours(startOfDay(date), hours), minutes);
-    const end = addHours(start, Number(newBooking.duration));
-
+    
     // Fallback for crypto.randomUUID which requires HTTPS
     const generateId = () => {
       if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -99,29 +101,56 @@ export default function App() {
       return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
     };
 
-    const booking: Booking = {
-      id: generateId(),
-      tableId: Number(newBooking.tableId),
-      memberName: newBooking.memberName,
-      startTime: start.toISOString(),
-      endTime: end.toISOString(),
-      date: format(date, "yyyy-MM-dd"),
-    };
+    const bookingsToAdd: Booking[] = [];
+    let currentStartDate = startOfDay(date);
+    const untilDate = startOfDay(newBooking.recurrenceUntil);
 
-    // Check for collisions
-    const hasCollision = filteredBookings.some((b) => {
-      if (b.tableId !== booking.tableId) return false;
-      const bStart = parseISO(b.startTime);
-      const bEnd = parseISO(b.endTime);
-      return (start < bEnd && end > bStart);
-    });
+    while (true) {
+      const start = setMinutes(setHours(currentStartDate, hours), minutes);
+      const end = addHours(start, Number(newBooking.duration));
+      const dateStr = format(currentStartDate, "yyyy-MM-dd");
 
-    if (hasCollision) {
-      alert("Dieser Tisch ist zu dieser Zeit bereits belegt!");
-      return;
+      const booking: Booking = {
+        id: generateId(),
+        tableId: Number(newBooking.tableId),
+        memberName: newBooking.memberName,
+        startTime: start.toISOString(),
+        endTime: end.toISOString(),
+        date: dateStr,
+      };
+
+      // Check for collisions for this specific instance
+      const hasCollision = bookings.some((b) => {
+        if (b.tableId !== booking.tableId) return false;
+        if (b.date !== dateStr) return false;
+        const bStart = parseISO(b.startTime);
+        const bEnd = parseISO(b.endTime);
+        return (start < bEnd && end > bStart);
+      });
+
+      if (hasCollision) {
+        alert(`Kollision am ${format(currentStartDate, "dd.MM.yyyy")}: Dieser Tisch ist bereits belegt!`);
+        return;
+      }
+
+      bookingsToAdd.push(booking);
+
+      if (newBooking.recurrence === "none") break;
+      
+      if (newBooking.recurrence === "daily") currentStartDate = addDays(currentStartDate, 1);
+      else if (newBooking.recurrence === "weekly") currentStartDate = addWeeks(currentStartDate, 1);
+      else if (newBooking.recurrence === "monthly") currentStartDate = addMonths(currentStartDate, 1);
+
+      if (isAfter(currentStartDate, untilDate)) break;
+      
+      // Safety limit: max 50 bookings at once
+      if (bookingsToAdd.length >= 50) {
+        alert("Maximale Anzahl von 50 Serienbuchungen erreicht.");
+        break;
+      }
     }
 
-    const updated = [...bookings, booking];
+    const updated = [...bookings, ...bookingsToAdd];
     const success = await saveBookings(updated);
     
     if (success) {
@@ -272,6 +301,61 @@ export default function App() {
                         <SelectItem value="4">4 Stunden</SelectItem>
                       </SelectContent>
                     </Select>
+                  </div>
+
+                  <div className="border-t border-slate-100 pt-4 mt-2 space-y-4">
+                    <div className="flex items-center gap-2 text-[#004d00] font-bold text-sm">
+                      <Repeat className="h-4 w-4" />
+                      Wiederholung
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label className="text-xs font-bold uppercase tracking-wider text-slate-400">Intervall</Label>
+                        <Select
+                          value={newBooking.recurrence}
+                          onValueChange={(v: any) => setNewBooking({ ...newBooking, recurrence: v })}
+                        >
+                          <SelectTrigger className="h-10">
+                            <SelectValue placeholder="Keine" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">Keine</SelectItem>
+                            <SelectItem value="daily">Täglich</SelectItem>
+                            <SelectItem value="weekly">Wöchentlich</SelectItem>
+                            <SelectItem value="monthly">Monatlich</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {newBooking.recurrence !== "none" && (
+                        <div className="space-y-2">
+                          <Label className="text-xs font-bold uppercase tracking-wider text-slate-400">Bis Datum</Label>
+                          <Popover>
+                            <PopoverTrigger
+                              render={
+                                <Button
+                                  variant="outline"
+                                  className="w-full h-10 justify-start text-left font-medium border-slate-200 text-xs"
+                                />
+                              }
+                            >
+                              <CalendarIcon className="mr-2 h-3 w-3" />
+                              {format(newBooking.recurrenceUntil, "dd.MM.yy")}
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0" align="end">
+                              <Calendar
+                                mode="single"
+                                selected={newBooking.recurrenceUntil}
+                                onSelect={(d) => d && setNewBooking({ ...newBooking, recurrenceUntil: d })}
+                                initialFocus
+                                locale={de}
+                              />
+                            </PopoverContent>
+                          </Popover>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
                 <DialogFooter>

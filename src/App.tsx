@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
-import { format, addHours, startOfDay, isSameDay, parseISO, setHours, setMinutes, addDays, subDays, addWeeks, addMonths, subMonths, isBefore, isAfter } from "date-fns";
+import { format, addHours, startOfDay, isSameDay, parseISO, setHours, setMinutes, addDays, subDays, addWeeks, addMonths, subMonths, isBefore, isAfter, startOfMonth, endOfMonth, eachDayOfInterval } from "date-fns";
 import { de } from "date-fns/locale";
-import { Calendar as CalendarIcon, Clock, Users, CheckCircle2, AlertCircle, Trash2, Plus, Info, Repeat, ChevronLeft, ChevronRight } from "lucide-react";
+import { Calendar as CalendarIcon, Clock, Users, CheckCircle2, AlertCircle, Trash2, Plus, Info, Repeat, ChevronLeft, ChevronRight, LayoutGrid, CalendarDays } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,7 @@ import { TABLES, Booking, OPENING_HOUR, CLOSING_HOUR } from "./types";
 
 export default function App() {
   const [date, setDate] = useState<Date>(new Date());
+  const [viewMode, setViewMode] = useState<"day" | "month">("day");
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [isBookingOpen, setIsBookingOpen] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState<{
@@ -224,6 +225,27 @@ export default function App() {
           </div>
 
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+            <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
+              <Button
+                variant={viewMode === "day" ? "secondary" : "ghost"}
+                size="sm"
+                className={cn("h-9 px-4 rounded-lg font-bold text-xs gap-2", viewMode === "day" && "bg-white shadow-sm")}
+                onClick={() => setViewMode("day")}
+              >
+                <LayoutGrid className="h-4 w-4" />
+                Tag
+              </Button>
+              <Button
+                variant={viewMode === "month" ? "secondary" : "ghost"}
+                size="sm"
+                className={cn("h-9 px-4 rounded-lg font-bold text-xs gap-2", viewMode === "month" && "bg-white shadow-sm")}
+                onClick={() => setViewMode("month")}
+              >
+                <CalendarDays className="h-4 w-4" />
+                Monat
+              </Button>
+            </div>
+
             <Popover>
               <PopoverTrigger
                 render={
@@ -430,17 +452,17 @@ export default function App() {
             variant="ghost"
             size="icon"
             className="h-10 w-10 text-slate-400 hover:text-[#004d00] hover:bg-green-50"
-            onClick={() => setDate(subDays(date, 1))}
+            onClick={() => setDate(viewMode === "day" ? subDays(date, 1) : subMonths(date, 1))}
           >
             <ChevronLeft className="h-6 w-6" />
           </Button>
           
           <div className="flex flex-col items-center">
             <span className="text-xs font-bold uppercase tracking-widest text-slate-400">
-              {format(date, "EEEE", { locale: de })}
+              {viewMode === "day" ? format(date, "EEEE", { locale: de }) : "Monatsübersicht"}
             </span>
             <span className="text-lg font-black text-slate-900">
-              {format(date, "dd. MMMM yyyy", { locale: de })}
+              {viewMode === "day" ? format(date, "dd. MMMM yyyy", { locale: de }) : format(date, "MMMM yyyy", { locale: de })}
             </span>
           </div>
 
@@ -448,104 +470,164 @@ export default function App() {
             variant="ghost"
             size="icon"
             className="h-10 w-10 text-slate-400 hover:text-[#004d00] hover:bg-green-50"
-            onClick={() => setDate(addDays(date, 1))}
+            onClick={() => setDate(viewMode === "day" ? addDays(date, 1) : addMonths(date, 1))}
           >
             <ChevronRight className="h-6 w-6" />
           </Button>
         </div>
 
-        {/* Tables Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-          {TABLES.map((table) => {
-            const tableBookings = filteredBookings
-              .filter((b) => b.tableId === table.id)
-              .sort((a, b) => parseISO(a.startTime).getTime() - parseISO(b.startTime).getTime());
+        {viewMode === "day" ? (
+          /* Tables Grid */
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+            {TABLES.map((table) => {
+              const tableBookings = filteredBookings
+                .filter((b) => b.tableId === table.id)
+                .sort((a, b) => parseISO(a.startTime).getTime() - parseISO(b.startTime).getTime());
 
-            return (
-              <Card key={table.id} className="border-none shadow-md overflow-hidden flex flex-col bg-white hover:shadow-xl transition-shadow duration-300">
-                <div className="h-2 bg-[#004d00]" />
-                <CardHeader className="pb-4">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-xl font-black text-slate-800">{table.name}</CardTitle>
-                    <div className={cn(
-                      "px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-widest",
-                      tableBookings.length > 0 
-                        ? "bg-amber-100 text-amber-700 border border-amber-200" 
-                        : "bg-emerald-100 text-emerald-700 border border-emerald-200"
-                    )}>
-                      {tableBookings.length > 0 ? "Belegt" : "Frei"}
+              return (
+                <Card key={table.id} className="border-none shadow-md overflow-hidden flex flex-col bg-white hover:shadow-xl transition-shadow duration-300">
+                  <div className="h-2 bg-[#004d00]" />
+                  <CardHeader className="pb-4">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-xl font-black text-slate-800">{table.name}</CardTitle>
                     </div>
-                  </div>
-                  <CardDescription className="font-medium">
-                    {tableBookings.length === 0 ? "Keine Reservierungen" : `${tableBookings.length} Buchung(en)`}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="flex-grow p-4 pt-0 space-y-3">
-                  {isLoading ? (
-                    <div className="flex justify-center py-8">
-                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#004d00]"></div>
-                    </div>
-                  ) : tableBookings.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-10 text-slate-300 space-y-3 bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
-                      <CheckCircle2 className="h-10 w-10 opacity-20" />
-                      <p className="text-xs font-bold uppercase tracking-wider">Tisch verfügbar</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-2.5">
-                      {tableBookings.map((b) => (
-                        <motion.div
-                          initial={{ opacity: 0, scale: 0.95 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          key={b.id}
-                          className="group relative bg-white border border-slate-100 rounded-xl p-3.5 shadow-sm hover:border-[#004d00]/30 transition-all"
-                        >
-                          <div className="flex justify-between items-center">
-                            <div className="space-y-1">
-                              <p className="text-sm font-bold text-slate-800">{b.memberName}</p>
-                              <div className="flex items-center text-[11px] font-bold text-slate-500 gap-1.5">
-                                <Clock className="h-3.5 w-3.5 text-[#004d00]" />
-                                <span className="bg-slate-100 px-1.5 py-0.5 rounded">
-                                  {format(parseISO(b.startTime), "HH:mm")} - {format(parseISO(b.endTime), "HH:mm")}
-                                </span>
+                    <CardDescription className="font-medium">
+                      {tableBookings.length === 0 ? "Keine Reservierungen" : `${tableBookings.length} Buchung(en)`}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="flex-grow p-4 pt-0 space-y-3">
+                    {isLoading ? (
+                      <div className="flex justify-center py-8">
+                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#004d00]"></div>
+                      </div>
+                    ) : tableBookings.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-10 text-slate-300 space-y-3 bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
+                        <CheckCircle2 className="h-10 w-10 opacity-20" />
+                        <p className="text-xs font-bold uppercase tracking-wider">Tisch verfügbar</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2.5">
+                        {tableBookings.map((b) => (
+                          <motion.div
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            key={b.id}
+                            className="group relative bg-white border border-slate-100 rounded-xl p-3.5 shadow-sm hover:border-[#004d00]/30 transition-all"
+                          >
+                            <div className="flex justify-between items-center">
+                              <div className="space-y-1">
+                                <p className="text-sm font-bold text-slate-800">{b.memberName}</p>
+                                <div className="flex items-center text-[11px] font-bold text-slate-500 gap-1.5">
+                                  <Clock className="h-3.5 w-3.5 text-[#004d00]" />
+                                  <span className="bg-slate-100 px-1.5 py-0.5 rounded">
+                                    {format(parseISO(b.startTime), "HH:mm")} - {format(parseISO(b.endTime), "HH:mm")}
+                                  </span>
+                                </div>
                               </div>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-full opacity-0 group-hover:opacity-100 transition-all"
+                                onClick={() => setDeleteConfirmation({
+                                  isOpen: true,
+                                  bookingId: b.id,
+                                  memberName: b.memberName,
+                                  date: b.date,
+                                  tableId: b.tableId,
+                                  startTime: b.startTime
+                                })}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
                             </div>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-full opacity-0 group-hover:opacity-100 transition-all"
-                              onClick={() => setDeleteConfirmation({
-                                isOpen: true,
-                                bookingId: b.id,
-                                memberName: b.memberName,
-                                date: b.date,
-                                tableId: b.tableId,
-                                startTime: b.startTime
-                              })}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </motion.div>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-                <CardFooter className="p-4 bg-slate-50/80 border-t border-slate-100">
-                  <Button
-                    variant="outline"
-                    className="w-full text-xs font-bold uppercase tracking-widest text-slate-600 hover:bg-white hover:text-[#004d00] hover:border-[#004d00] transition-all"
-                    onClick={() => {
-                      setNewBooking({ ...newBooking, tableId: table.id.toString() });
-                      setIsBookingOpen(true);
-                    }}
-                  >
-                    Reservieren
-                  </Button>
-                </CardFooter>
-              </Card>
-            );
-          })}
-        </div>
+                          </motion.div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                  <CardFooter className="p-4 bg-slate-50/80 border-t border-slate-100">
+                    <Button
+                      variant="outline"
+                      className="w-full text-xs font-bold uppercase tracking-widest text-slate-600 hover:bg-white hover:text-[#004d00] hover:border-[#004d00] transition-all"
+                      onClick={() => {
+                        setNewBooking({ ...newBooking, tableId: table.id.toString() });
+                        setIsBookingOpen(true);
+                      }}
+                    >
+                      Reservieren
+                    </Button>
+                  </CardFooter>
+                </Card>
+              );
+            })}
+          </div>
+        ) : (
+          /* Monthly View */
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+            <div className="grid grid-cols-7 border-b border-slate-100 bg-slate-50">
+              {["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"].map((day) => (
+                <div key={day} className="py-3 text-center text-[10px] font-black uppercase tracking-widest text-slate-400">
+                  {day}
+                </div>
+              ))}
+            </div>
+            <div className="grid grid-cols-7">
+              {(() => {
+                const start = startOfMonth(date);
+                const end = endOfMonth(date);
+                const days = eachDayOfInterval({ start, end });
+                
+                // Add padding for the first week
+                const firstDayIdx = (start.getDay() + 6) % 7; // Adjust for Mo-So
+                const padding = Array.from({ length: firstDayIdx });
+
+                return [
+                  ...padding.map((_, i) => <div key={`pad-${i}`} className="h-24 md:h-32 border-r border-b border-slate-50 bg-slate-50/30" />),
+                  ...days.map((day) => {
+                    const dayStr = format(day, "yyyy-MM-dd");
+                    const dayBookings = bookings.filter(b => b.date === dayStr);
+                    const isToday = isSameDay(day, new Date());
+                    
+                    return (
+                      <div 
+                        key={dayStr} 
+                        className={cn(
+                          "h-24 md:h-32 border-r border-b border-slate-100 p-2 transition-colors hover:bg-slate-50 cursor-pointer",
+                          isToday && "bg-green-50/30"
+                        )}
+                        onClick={() => {
+                          setDate(day);
+                          setViewMode("day");
+                        }}
+                      >
+                        <div className="flex justify-between items-start">
+                          <span className={cn(
+                            "text-xs font-bold h-6 w-6 flex items-center justify-center rounded-full",
+                            isToday ? "bg-[#004d00] text-white" : "text-slate-400"
+                          )}>
+                            {format(day, "d")}
+                          </span>
+                        </div>
+                        <div className="mt-2 space-y-1 overflow-hidden">
+                          {TABLES.map(table => {
+                            const count = dayBookings.filter(b => b.tableId === table.id).length;
+                            if (count === 0) return null;
+                            return (
+                              <div key={table.id} className="flex items-center gap-1 text-[9px] font-bold text-slate-600 truncate">
+                                <div className="h-1.5 w-1.5 rounded-full bg-[#004d00]" />
+                                T{table.id}: {count}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })
+                ];
+              })()}
+            </div>
+          </div>
+        )}
 
         {/* Delete Confirmation Dialog */}
         <Dialog open={deleteConfirmation?.isOpen || false} onOpenChange={(open) => !open && setDeleteConfirmation(null)}>

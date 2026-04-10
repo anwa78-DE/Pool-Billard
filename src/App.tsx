@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
-import { format, addHours, startOfDay, isSameDay, parseISO, setHours, setMinutes, addDays, addWeeks, addMonths, isBefore, isAfter } from "date-fns";
+import { format, addHours, startOfDay, isSameDay, parseISO, setHours, setMinutes, addDays, subDays, addWeeks, addMonths, subMonths, isBefore, isAfter } from "date-fns";
 import { de } from "date-fns/locale";
-import { Calendar as CalendarIcon, Clock, Users, CheckCircle2, AlertCircle, Trash2, Plus, Info, Repeat } from "lucide-react";
+import { Calendar as CalendarIcon, Clock, Users, CheckCircle2, AlertCircle, Trash2, Plus, Info, Repeat, ChevronLeft, ChevronRight } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
 import { Button } from "@/components/ui/button";
@@ -209,13 +209,41 @@ export default function App() {
                 {date ? format(date, "PPP", { locale: de }) : <span>Datum wählen</span>}
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0" align="end">
+                <div className="p-3 border-b border-slate-100 flex justify-between items-center gap-2">
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="text-xs font-bold text-[#004d00]"
+                    onClick={() => setDate(new Date())}
+                  >
+                    Heute
+                  </Button>
+                  <div className="flex gap-1">
+                    <Button 
+                      variant="outline" 
+                      size="icon" 
+                      className="h-7 w-7"
+                      onClick={() => setDate(subMonths(date, 1))}
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="icon" 
+                      className="h-7 w-7"
+                      onClick={() => setDate(addMonths(date, 1))}
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
                 <Calendar
                   mode="single"
                   selected={date}
                   onSelect={(d) => d && setDate(d)}
                   initialFocus
                   locale={de}
-                  className="rounded-md border shadow"
+                  className="rounded-md"
                 />
               </PopoverContent>
             </Popover>
@@ -367,6 +395,36 @@ export default function App() {
             </Dialog>
           </div>
         </header>
+
+        {/* Day Navigation Bar */}
+        <div className="flex items-center justify-between bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-10 w-10 text-slate-400 hover:text-[#004d00] hover:bg-green-50"
+            onClick={() => setDate(subDays(date, 1))}
+          >
+            <ChevronLeft className="h-6 w-6" />
+          </Button>
+          
+          <div className="flex flex-col items-center">
+            <span className="text-xs font-bold uppercase tracking-widest text-slate-400">
+              {format(date, "EEEE", { locale: de })}
+            </span>
+            <span className="text-lg font-black text-slate-900">
+              {format(date, "dd. MMMM yyyy", { locale: de })}
+            </span>
+          </div>
+
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-10 w-10 text-slate-400 hover:text-[#004d00] hover:bg-green-50"
+            onClick={() => setDate(addDays(date, 1))}
+          >
+            <ChevronRight className="h-6 w-6" />
+          </Button>
+        </div>
 
         {/* Tables Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">

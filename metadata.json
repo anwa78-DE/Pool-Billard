@@ -1,0 +1,5 @@
+{
+  "name": "Billiard Club Manager",
+  "description": "Eine App zur Verwaltung und Buchung von Billardtischen für Vereinsmitglieder.",
+  "requestFramePermissions": []
+}

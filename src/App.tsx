@@ -1,0 +1,376 @@
+import { useState, useEffect, useMemo } from "react";
+import { format, addHours, startOfDay, isSameDay, parseISO, setHours, setMinutes } from "date-fns";
+import { de } from "date-fns/locale";
+import { Calendar as CalendarIcon, Clock, Users, CheckCircle2, AlertCircle, Trash2, Plus, Info } from "lucide-react";
+import { motion, AnimatePresence } from "motion/react";
+
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
+import { TABLES, Booking, OPENING_HOUR, CLOSING_HOUR } from "./types";
+
+export default function App() {
+  const [date, setDate] = useState<Date>(new Date());
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [isBookingOpen, setIsBookingOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [newBooking, setNewBooking] = useState<{
+    tableId: string;
+    memberName: string;
+    startTime: string;
+    duration: string;
+  }>({
+    tableId: "1",
+    memberName: "",
+    startTime: "10:00",
+    duration: "1",
+  });
+
+  // Load bookings from server
+  useEffect(() => {
+    fetchBookings();
+  }, []);
+
+  const fetchBookings = async () => {
+    setIsLoading(true);
+    try {
+      const response = await fetch("api.php");
+      if (response.ok) {
+        const data = await response.json();
+        setBookings(data);
+      }
+    } catch (e) {
+      console.error("Failed to fetch bookings", e);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const saveBookings = async (updatedBookings: Booking[]) => {
+    try {
+      await fetch("api.php", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updatedBookings),
+      });
+    } catch (e) {
+      console.error("Failed to save bookings", e);
+    }
+  };
+
+  const filteredBookings = useMemo(() => {
+    const dateStr = format(date, "yyyy-MM-dd");
+    return bookings.filter((b) => b.date === dateStr);
+  }, [bookings, date]);
+
+  const handleAddBooking = async () => {
+    if (!newBooking.memberName) return;
+
+    const [hours, minutes] = newBooking.startTime.split(":").map(Number);
+    const start = setMinutes(setHours(startOfDay(date), hours), minutes);
+    const end = addHours(start, Number(newBooking.duration));
+
+    const booking: Booking = {
+      id: crypto.randomUUID(),
+      tableId: Number(newBooking.tableId),
+      memberName: newBooking.memberName,
+      startTime: start.toISOString(),
+      endTime: end.toISOString(),
+      date: format(date, "yyyy-MM-dd"),
+    };
+
+    // Check for collisions
+    const hasCollision = filteredBookings.some((b) => {
+      if (b.tableId !== booking.tableId) return false;
+      const bStart = parseISO(b.startTime);
+      const bEnd = parseISO(b.endTime);
+      return (start < bEnd && end > bStart);
+    });
+
+    if (hasCollision) {
+      alert("Dieser Tisch ist zu dieser Zeit bereits belegt!");
+      return;
+    }
+
+    const updated = [...bookings, booking];
+    setBookings(updated);
+    await saveBookings(updated);
+    setIsBookingOpen(false);
+    setNewBooking({ ...newBooking, memberName: "" });
+  };
+
+  const deleteBooking = async (id: string) => {
+    const updated = bookings.filter((b) => b.id !== id);
+    setBookings(updated);
+    await saveBookings(updated);
+  };
+
+  const timeSlots = Array.from({ length: CLOSING_HOUR - OPENING_HOUR + 1 }, (_, i) => {
+    const hour = OPENING_HOUR + i;
+    return `${hour.toString().padStart(2, "0")}:00`;
+  });
+
+  return (
+    <div className="min-h-screen bg-[#f0f4f0] text-slate-900 font-sans">
+      {/* Top Branding Bar */}
+      <div className="bg-[#004d00] text-white py-2 px-4 text-center text-xs font-medium tracking-widest uppercase">
+        1. Pool Billard Club Ingelheim e.V.
+      </div>
+
+      <div className="max-w-7xl mx-auto p-4 md:p-8 space-y-8">
+        {/* Header Section */}
+        <header className="flex flex-col lg:flex-row lg:items-end justify-between gap-6 bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+          <div className="space-y-2">
+            <div className="flex items-center gap-3">
+              <div className="bg-[#004d00] p-2.5 rounded-xl shadow-inner">
+                <Users className="h-6 w-6 text-white" />
+              </div>
+              <h1 className="text-2xl md:text-3xl font-black tracking-tight text-slate-900">
+                Tischreservierung
+              </h1>
+            </div>
+            <p className="text-slate-500 max-w-md">
+              Buchen Sie Ihren Tisch im Vereinsheim Budenheim. Wir verfügen über 4 Dynamics II Tische.
+            </p>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+            <Popover>
+              <PopoverTrigger
+                render={
+                  <Button
+                    variant="outline"
+                    className="w-full sm:w-[240px] justify-start text-left font-semibold border-slate-200 bg-slate-50 hover:bg-slate-100 transition-all"
+                  />
+                }
+              >
+                <CalendarIcon className="mr-2 h-4 w-4 text-[#004d00]" />
+                {date ? format(date, "PPP", { locale: de }) : <span>Datum wählen</span>}
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="end">
+                <Calendar
+                  mode="single"
+                  selected={date}
+                  onSelect={(d) => d && setDate(d)}
+                  initialFocus
+                  locale={de}
+                  className="rounded-md border shadow"
+                />
+              </PopoverContent>
+            </Popover>
+
+            <Dialog open={isBookingOpen} onOpenChange={setIsBookingOpen}>
+              <DialogTrigger
+                render={
+                  <Button className="bg-[#004d00] hover:bg-[#003300] text-white font-bold shadow-lg shadow-green-900/20 gap-2 h-11 px-6" />
+                }
+              >
+                <Plus className="h-5 w-5" />
+                Jetzt Buchen
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-[450px] rounded-3xl">
+                <DialogHeader>
+                  <DialogTitle className="text-2xl font-bold text-[#004d00]">Tisch Reservieren</DialogTitle>
+                  <DialogDescription>
+                    Reservierung für {format(date, "EEEE, dd. MMMM", { locale: de })}.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-6 py-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="name" className="text-sm font-bold uppercase tracking-wider text-slate-500">Mitgliedsname</Label>
+                    <Input
+                      id="name"
+                      placeholder="Vorname Nachname"
+                      className="h-12 border-slate-200 focus:ring-[#004d00] focus:border-[#004d00]"
+                      value={newBooking.memberName}
+                      onChange={(e) => setNewBooking({ ...newBooking, memberName: e.target.value })}
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label className="text-sm font-bold uppercase tracking-wider text-slate-500">Tisch</Label>
+                      <Select
+                        value={newBooking.tableId}
+                        onValueChange={(v) => setNewBooking({ ...newBooking, tableId: v })}
+                      >
+                        <SelectTrigger className="h-12">
+                          <SelectValue placeholder="Tisch" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {TABLES.map((t) => (
+                            <SelectItem key={t.id} value={t.id.toString()}>
+                              {t.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-sm font-bold uppercase tracking-wider text-slate-500">Startzeit</Label>
+                      <Select
+                        value={newBooking.startTime}
+                        onValueChange={(v) => setNewBooking({ ...newBooking, startTime: v })}
+                      >
+                        <SelectTrigger className="h-12">
+                          <SelectValue placeholder="Zeit" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {timeSlots.map((slot) => (
+                            <SelectItem key={slot} value={slot}>
+                              {slot}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm font-bold uppercase tracking-wider text-slate-500">Dauer</Label>
+                    <Select
+                      value={newBooking.duration}
+                      onValueChange={(v) => setNewBooking({ ...newBooking, duration: v })}
+                    >
+                      <SelectTrigger className="h-12">
+                        <SelectValue placeholder="Dauer" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="1">1 Stunde</SelectItem>
+                        <SelectItem value="2">2 Stunden</SelectItem>
+                        <SelectItem value="3">3 Stunden</SelectItem>
+                        <SelectItem value="4">4 Stunden</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button type="submit" onClick={handleAddBooking} className="w-full h-12 bg-[#004d00] hover:bg-[#003300] text-lg font-bold">
+                    Reservierung Bestätigen
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
+        </header>
+
+        {/* Tables Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+          {TABLES.map((table) => {
+            const tableBookings = filteredBookings
+              .filter((b) => b.tableId === table.id)
+              .sort((a, b) => parseISO(a.startTime).getTime() - parseISO(b.startTime).getTime());
+
+            return (
+              <Card key={table.id} className="border-none shadow-md overflow-hidden flex flex-col bg-white hover:shadow-xl transition-shadow duration-300">
+                <div className="h-2 bg-[#004d00]" />
+                <CardHeader className="pb-4">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-xl font-black text-slate-800">{table.name}</CardTitle>
+                    <div className={cn(
+                      "px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-widest",
+                      tableBookings.length > 0 
+                        ? "bg-amber-100 text-amber-700 border border-amber-200" 
+                        : "bg-emerald-100 text-emerald-700 border border-emerald-200"
+                    )}>
+                      {tableBookings.length > 0 ? "Belegt" : "Frei"}
+                    </div>
+                  </div>
+                  <CardDescription className="font-medium">
+                    {tableBookings.length === 0 ? "Keine Reservierungen" : `${tableBookings.length} Buchung(en)`}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="flex-grow p-4 pt-0 space-y-3">
+                  {isLoading ? (
+                    <div className="flex justify-center py-8">
+                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#004d00]"></div>
+                    </div>
+                  ) : tableBookings.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-10 text-slate-300 space-y-3 bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
+                      <CheckCircle2 className="h-10 w-10 opacity-20" />
+                      <p className="text-xs font-bold uppercase tracking-wider">Tisch verfügbar</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2.5">
+                      {tableBookings.map((b) => (
+                        <motion.div
+                          initial={{ opacity: 0, scale: 0.95 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          key={b.id}
+                          className="group relative bg-white border border-slate-100 rounded-xl p-3.5 shadow-sm hover:border-[#004d00]/30 transition-all"
+                        >
+                          <div className="flex justify-between items-center">
+                            <div className="space-y-1">
+                              <p className="text-sm font-bold text-slate-800">{b.memberName}</p>
+                              <div className="flex items-center text-[11px] font-bold text-slate-500 gap-1.5">
+                                <Clock className="h-3.5 w-3.5 text-[#004d00]" />
+                                <span className="bg-slate-100 px-1.5 py-0.5 rounded">
+                                  {format(parseISO(b.startTime), "HH:mm")} - {format(parseISO(b.endTime), "HH:mm")}
+                                </span>
+                              </div>
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-full opacity-0 group-hover:opacity-100 transition-all"
+                              onClick={() => deleteBooking(b.id)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </motion.div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+                <CardFooter className="p-4 bg-slate-50/80 border-t border-slate-100">
+                  <Button
+                    variant="outline"
+                    className="w-full text-xs font-bold uppercase tracking-widest text-slate-600 hover:bg-white hover:text-[#004d00] hover:border-[#004d00] transition-all"
+                    onClick={() => {
+                      setNewBooking({ ...newBooking, tableId: table.id.toString() });
+                      setIsBookingOpen(true);
+                    }}
+                  >
+                    Reservieren
+                  </Button>
+                </CardFooter>
+              </Card>
+            );
+          })}
+        </div>
+
+        {/* Footer Info */}
+        <footer className="bg-[#004d00] text-white rounded-3xl p-8 shadow-xl relative overflow-hidden">
+          <div className="absolute top-0 right-0 p-12 opacity-10 pointer-events-none">
+            <Users className="h-64 w-64" />
+          </div>
+          <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-8">
+            <div className="space-y-4 text-center md:text-left">
+              <div className="inline-flex items-center gap-2 bg-white/10 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest">
+                <Info className="h-3 w-3" />
+                System-Info
+              </div>
+              <h3 className="text-2xl font-black">Zentrale Datenspeicherung</h3>
+              <p className="text-green-100/80 max-w-xl text-sm leading-relaxed font-medium">
+                Ihre Buchungen werden sicher auf dem Webspace in einer zentralen Datei gespeichert. 
+                Alle Vereinsmitglieder sehen denselben Stand in Echtzeit. 
+                Keine externe Datenbank erforderlich.
+              </p>
+            </div>
+            <div className="flex flex-col items-center gap-2">
+              <div className="text-4xl font-black">4</div>
+              <div className="text-[10px] font-black uppercase tracking-[0.3em] opacity-60 text-center">
+                Dynamics II<br/>Profi-Tische
+              </div>
+            </div>
+          </div>
+        </footer>
+      </div>
+    </div>
+  );
+}

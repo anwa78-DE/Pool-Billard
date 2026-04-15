@@ -195,6 +195,17 @@ export default function App() {
     setDeleteConfirmation(null);
   };
 
+  const getAvailableHours = (tableBookings: Booking[]) => {
+    const totalHours = 24;
+    const bookedHours = tableBookings.reduce((acc, b) => {
+      const start = parseISO(b.startTime);
+      const end = parseISO(b.endTime);
+      const duration = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+      return acc + duration;
+    }, 0);
+    return Math.max(0, totalHours - bookedHours);
+  };
+
   const timeSlots = Array.from({ length: CLOSING_HOUR - OPENING_HOUR + 1 }, (_, i) => {
     const hour = OPENING_HOUR + i;
     return `${hour.toString().padStart(2, "0")}:00`;
@@ -483,6 +494,8 @@ export default function App() {
               const tableBookings = filteredBookings
                 .filter((b) => b.tableId === table.id)
                 .sort((a, b) => parseISO(a.startTime).getTime() - parseISO(b.startTime).getTime());
+              
+              const availableHours = getAvailableHours(tableBookings);
 
               return (
                 <Card key={table.id} className="border-none shadow-md overflow-hidden flex flex-col bg-white hover:shadow-xl transition-shadow duration-300">
@@ -490,6 +503,9 @@ export default function App() {
                   <CardHeader className="pb-4">
                     <div className="flex items-center justify-between">
                       <CardTitle className="text-xl font-black text-slate-800">{table.name}</CardTitle>
+                      <div className="text-[10px] font-bold bg-slate-100 px-2 py-1 rounded text-slate-500">
+                        {availableHours}h frei
+                      </div>
                     </div>
                     <CardDescription className="font-medium">
                       {tableBookings.length === 0 ? "Keine Reservierungen" : `${tableBookings.length} Buchung(en)`}
@@ -610,12 +626,21 @@ export default function App() {
                         </div>
                         <div className="mt-2 space-y-1 overflow-hidden">
                           {TABLES.map(table => {
-                            const count = dayBookings.filter(b => b.tableId === table.id).length;
-                            if (count === 0) return null;
+                            const tableDayBookings = dayBookings.filter(b => b.tableId === table.id);
+                            const count = tableDayBookings.length;
+                            const availableHours = getAvailableHours(tableDayBookings);
+                            
+                            if (count === 0) return (
+                              <div key={table.id} className="flex items-center gap-1 text-[8px] font-bold text-slate-400 truncate">
+                                <div className="h-1 w-1 rounded-full bg-slate-200" />
+                                T{table.id}: 24h
+                              </div>
+                            );
+                            
                             return (
                               <div key={table.id} className="flex items-center gap-1 text-[9px] font-bold text-slate-600 truncate">
                                 <div className="h-1.5 w-1.5 rounded-full bg-[#004d00]" />
-                                T{table.id}: {count}
+                                T{table.id}: {availableHours}h frei
                               </div>
                             );
                           })}

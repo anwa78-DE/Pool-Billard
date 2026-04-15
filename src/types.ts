@@ -19,5 +19,5 @@ export const TABLES: Table[] = [
   { id: 4, name: "Tisch 4" },
 ];
 
-export const OPENING_HOUR = 10;
-export const CLOSING_HOUR = 22;
+export const OPENING_HOUR = 0;
+export const CLOSING_HOUR = 23;
